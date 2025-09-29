@@ -1,0 +1,111 @@
+Liquibase – Overview and MongoDB Usage
+1. What is Liquibase?
+
+Liquibase is an open-source database change management tool that allows teams to:
+
+Track, version, and deploy database schema and data changes.
+
+Apply changes consistently across environments (Dev → QA → Production).
+
+Avoid manual SQL scripts and reduce human errors in database updates.
+
+Maintain a history of changes in the database via a changelog tracking mechanism.
+
+Core Concepts:
+
+Changelog – A file (YAML, JSON, XML, or SQL) that contains changesets describing database changes.
+
+Changeset – A single, uniquely identified unit of change (e.g., insert, update, delete, create collection/table).
+
+DatabaseChangeLog & Lock – Internal collections/tables used by Liquibase to track applied changes and ensure only one update runs at a time.
+
+2. OSS vs Commercial Versions
+
+Liquibase has two main offerings: Open Source (OSS) and Commercial (Pro/Enterprise).
+
+Feature / Capability	OSS Version	Commercial Version (Pro/Enterprise)
+Supported Databases	RDBMS (MySQL, PostgreSQL, MSSQL, etc.), MongoDB	All OSS + advanced DB features and enterprise support
+MongoDB Support	✅ Basic operations: insertOne, insertMany, update, delete, runCommand	✅ Full MongoDB support, including mongoFile, dropAll, schema diff, advanced auditing
+mongoFile changesets	❌ Not supported	✅ Supported – allows executing .js or .json scripts directly
+Rollback support	✅ Limited	✅ Advanced rollback and changelog diffing
+GUI / Visual diff tools	❌ Not included	✅ Provided in Liquibase Pro
+Team / Pipeline Integration	✅ via CLI	✅ via CLI, GUI, and APIs
+
+Note: OSS version works perfectly for basic MongoDB data changes, but mongoFile-based complex migrations (e.g., large JS scripts, custom functions) are only available in Pro.
+
+3. MongoDB Usage in OSS
+
+In OSS, you can perform standard MongoDB operations with YAML, JSON, or XML changesets.
+
+3.1. insertOne Example
+databaseChangeLog:
+  - changeSet:
+      id: 001
+      author: oleksandr
+      changes:
+        - insertOne:
+            collectionName: users
+            document:
+              username: "admin"
+              email: "admin@example.com"
+              role: "SUPER_ADMIN"
+              createdAt: { "$date": "2025-09-29T12:00:00Z" }
+
+3.2. insertMany Example
+databaseChangeLog:
+  - changeSet:
+      id: 002
+      author: oleksandr
+      changes:
+        - insertMany:
+            collectionName: feature_flags
+            documents:
+              - key: "feature_login_v2"
+                enabled: true
+                createdAt: { "$date": "2025-09-29T12:00:00Z" }
+              - key: "feature_beta_dashboard"
+                enabled: false
+                createdAt: { "$date": "2025-09-29T12:00:00Z" }
+
+3.3. update Example
+databaseChangeLog:
+  - changeSet:
+      id: 003
+      author: oleksandr
+      changes:
+        - update:
+            collectionName: users
+            filter:
+              username: "admin"
+            update:
+              $set:
+                role: "SYSTEM_ADMIN"
+
+✅ OSS version is sufficient for data seeding, simple updates, and basic schema operations.
+
+4. MongoDB Usage in Commercial Version
+
+The Commercial (Pro/Enterprise) version supports advanced features including mongoFile changesets.
+
+4.1. mongoFile Example
+
+Allows executing a full MongoDB script file (JS/JSON) directly as a changeset:
+databaseChangeLog:
+  - changeSet:
+      id: 010
+      author: oleksandr
+      changes:
+        - mongoFile:
+            path: changelogs/migrations/update_roles.js
+
+Advantages:
+Can run complex JS scripts for transformations.
+Useful for bulk updates, custom functions, or large migrations.
+Reduces the number of changesets when migrating large datasets.
+
+5. Summary
+
+Liquibase OSS is ideal for simple MongoDB operations: insertOne, insertMany, update, delete.
+Liquibase Pro adds support for mongoFile, advanced rollbacks, diff tools, and enterprise features.
+For internal pipelines, OSS covers most cases for seed data, config changes, and small updates.
+Use Pro only if you need complex MongoDB scripts or advanced auditing/rollback.
