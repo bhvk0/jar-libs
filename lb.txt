@@ -1,111 +1,101 @@
-Liquibase – Overview and MongoDB Usage
-1. What is Liquibase?
+Liquibase MongoDB – Required Files & Libraries
+1. Core Components
 
-Liquibase is an open-source database change management tool that allows teams to:
+Regardless of OSS or Commercial, you need:
 
-Track, version, and deploy database schema and data changes.
+Liquibase CLI / Core Library
 
-Apply changes consistently across environments (Dev → QA → Production).
+The main Liquibase executable (liquibase CLI or Java JAR).
 
-Avoid manual SQL scripts and reduce human errors in database updates.
+Provides the command framework, changelog parsing, and change execution.
 
-Maintain a history of changes in the database via a changelog tracking mechanism.
+Liquibase MongoDB Extension
 
-Core Concepts:
+A database-specific extension that lets Liquibase talk to MongoDB.
 
-Changelog – A file (YAML, JSON, XML, or SQL) that contains changesets describing database changes.
+Distributed as a JAR file.
 
-Changeset – A single, uniquely identified unit of change (e.g., insert, update, delete, create collection/table).
+2. OSS Setup (Open Source)
+Required JARs / Files
 
-DatabaseChangeLog & Lock – Internal collections/tables used by Liquibase to track applied changes and ensure only one update runs at a time.
+liquibase-core (comes with CLI or Maven/Gradle dep)
+→ Base Liquibase engine.
 
-2. OSS vs Commercial Versions
+liquibase-mongodb extension (OSS)
+→ Provides support for MongoDB changes (insertOne, insertMany, update, delete, runCommand).
 
-Liquibase has two main offerings: Open Source (OSS) and Commercial (Pro/Enterprise).
+MongoDB Java Driver
+→ Required for connecting to MongoDB. Typically bundled with the extension.
 
-Feature / Capability	OSS Version	Commercial Version (Pro/Enterprise)
-Supported Databases	RDBMS (MySQL, PostgreSQL, MSSQL, etc.), MongoDB	All OSS + advanced DB features and enterprise support
-MongoDB Support	✅ Basic operations: insertOne, insertMany, update, delete, runCommand	✅ Full MongoDB support, including mongoFile, dropAll, schema diff, advanced auditing
-mongoFile changesets	❌ Not supported	✅ Supported – allows executing .js or .json scripts directly
-Rollback support	✅ Limited	✅ Advanced rollback and changelog diffing
-GUI / Visual diff tools	❌ Not included	✅ Provided in Liquibase Pro
-Team / Pipeline Integration	✅ via CLI	✅ via CLI, GUI, and APIs
+How to Install
 
-Note: OSS version works perfectly for basic MongoDB data changes, but mongoFile-based complex migrations (e.g., large JS scripts, custom functions) are only available in Pro.
+Option A: Standalone CLI
+Download the extension JAR and put it in the liquibase/lib folder next to the Liquibase executable:
+liquibase/
+  ├─ liquibase (CLI binary or liquibase.jar)
+  ├─ lib/
+      ├─ liquibase-mongodb-<version>.jar
+      ├─ mongodb-driver-sync-<version>.jar
 
-3. MongoDB Usage in OSS
+Option B: Maven/Gradle Dependency (Java project)
+<dependency>
+  <groupId>org.liquibase.ext</groupId>
+  <artifactId>liquibase-mongodb</artifactId>
+  <version>4.30.0</version> <!-- match your Liquibase version -->
+</dependency>
 
-In OSS, you can perform standard MongoDB operations with YAML, JSON, or XML changesets.
+✅ OSS MongoDB extension allows only basic changesets:
 
-3.1. insertOne Example
-databaseChangeLog:
-  - changeSet:
-      id: 001
-      author: oleksandr
-      changes:
-        - insertOne:
-            collectionName: users
-            document:
-              username: "admin"
-              email: "admin@example.com"
-              role: "SUPER_ADMIN"
-              createdAt: { "$date": "2025-09-29T12:00:00Z" }
+insertOne
 
-3.2. insertMany Example
-databaseChangeLog:
-  - changeSet:
-      id: 002
-      author: oleksandr
-      changes:
-        - insertMany:
-            collectionName: feature_flags
-            documents:
-              - key: "feature_login_v2"
-                enabled: true
-                createdAt: { "$date": "2025-09-29T12:00:00Z" }
-              - key: "feature_beta_dashboard"
-                enabled: false
-                createdAt: { "$date": "2025-09-29T12:00:00Z" }
+insertMany
 
-3.3. update Example
-databaseChangeLog:
-  - changeSet:
-      id: 003
-      author: oleksandr
-      changes:
-        - update:
-            collectionName: users
-            filter:
-              username: "admin"
-            update:
-              $set:
-                role: "SYSTEM_ADMIN"
+update
 
-✅ OSS version is sufficient for data seeding, simple updates, and basic schema operations.
+delete
 
-4. MongoDB Usage in Commercial Version
+runCommand
 
-The Commercial (Pro/Enterprise) version supports advanced features including mongoFile changesets.
 
-4.1. mongoFile Example
+3. Commercial Setup (Pro/Enterprise)
+Additional JARs / Files
 
-Allows executing a full MongoDB script file (JS/JSON) directly as a changeset:
-databaseChangeLog:
-  - changeSet:
-      id: 010
-      author: oleksandr
-      changes:
-        - mongoFile:
-            path: changelogs/migrations/update_roles.js
+In addition to the OSS libraries, Commercial versions provide Pro extensions:
 
-Advantages:
-Can run complex JS scripts for transformations.
-Useful for bulk updates, custom functions, or large migrations.
-Reduces the number of changesets when migrating large datasets.
+liquibase-commercial.jar
+→ Core library enabling enterprise-only changes and advanced rollback.
 
-5. Summary
+liquibase-mongodb-pro.jar (sometimes bundled into the commercial package)
+→ Unlocks advanced MongoDB features, e.g.:
 
-Liquibase OSS is ideal for simple MongoDB operations: insertOne, insertMany, update, delete.
-Liquibase Pro adds support for mongoFile, advanced rollbacks, diff tools, and enterprise features.
-For internal pipelines, OSS covers most cases for seed data, config changes, and small updates.
-Use Pro only if you need complex MongoDB scripts or advanced auditing/rollback.
+mongoFile changesets (executing external .js or .json scripts).
+
+Extended rollback support.
+
+Schema diffing and audit/reporting for MongoDB.
+
+License file (liquibase.lic)
+→ Must be placed in $HOME/.liquibase/ or set via LIQUIBASE_LICENSE_KEY environment variable.
+
+Folder Structure Example
+
+liquibase/
+  ├─ liquibase (CLI)
+  ├─ lib/
+      ├─ liquibase-mongodb-<version>.jar
+      ├─ liquibase-commercial-<version>.jar
+      ├─ liquibase-mongodb-pro-<version>.jar
+      ├─ mongodb-driver-sync-<version>.jar
+  ├─ liquibase.lic   <-- License file
+
+
+
+
+Summary:
+
+OSS = liquibase-core + liquibase-mongodb + MongoDB driver.
+
+Pro = OSS libs + liquibase-commercial.jar + liquibase-mongodb-pro.jar + license file.
+
+Key difference: Pro supports mongoFile changesets and advanced enterprise features, while OSS only supports basic MongoDB operations (insertOne, insertMany, update, etc.).
+
