@@ -1,85 +1,7 @@
-name: Sync new commits to feature/new-updates
-
-on:
-  schedule:
-    - cron: '0 2 * * *' # ежедневно в 2:00
-  workflow_dispatch:     # ручной запуск
-
-jobs:
-  sync:
-    runs-on: [self-hosted, linux, corporate-runner]
-
-    container:
-      image: ubuntu:latest
-
-    steps:
-      - name: Install dependencies
-        run: |
-          apt-get update
-          apt-get install -y git curl
-
-      - name: Checkout corporate repo
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0   # полный репозиторий нужен для cherry-pick
-
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-      - name: Add upstream remote
-        run: |
-          git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
-          git fetch upstream
-
-- name: Cherry-pick new commits from upstream
-  run: |
-    git checkout feature/new-updates
-
-    # Список коммитов, которые нужно пропустить (удалённые вручную)
-    SKIPPED_COMMITS=("abc123" "def456")  # замените на реальные хэши
-
-    # Получаем список новых коммитов после нашей ветки
-    NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main)
-
-    if [ -z "$NEW_COMMITS" ]; then
-      echo "No new commits to sync"
-      exit 0
-    fi
-
-    # Отключаем падение скрипта при ошибке
-    set +e
-
-    # Проходим по каждому новому коммиту
-    for COMMIT in $NEW_COMMITS; do
-      if [[ " ${SKIPPED_COMMITS[@]} " =~ " ${COMMIT} " ]]; then
-        echo "Skipping commit $COMMIT (blacklisted)"
-        continue
-      fi
-
-      echo "Applying commit $COMMIT..."
-      git cherry-pick $COMMIT
-
-      if [ $? -ne 0 ]; then
-        echo "Skipped commit $COMMIT due to conflict or policy"
-        git cherry-pick --abort
-      else
-        echo "Successfully applied commit $COMMIT"
-      fi
-    done
-
-
-      - name: Push new commits
-        run: |
-          git push origin feature/new-updates
-
----
 - name: Cherry-pick new commits from upstream
   run: |
     set -e
 
-    # Список новых коммитов
     NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main || true)
 
     if [ -z "$NEW_COMMITS" ]; then
@@ -90,34 +12,29 @@ jobs:
     echo "Found new commits:"
     echo "$NEW_COMMITS"
 
-    # Регулярки для поиска секретов
     SECRET_PATTERNS="(hooks.slack.com|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN( RSA)? PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]+|eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9._-]*\.[A-Za-z0-9._-]*)"
 
     for commit in $NEW_COMMITS; do
       echo "🔍 Checking commit $commit..."
 
-      # Проверяем, merge ли это
-      if git cat-file -p $commit | grep -q "^Merge:"; then
+      # Если это merge-коммит — пропускаем заранее
+      if [ "$(git rev-list --parents -n 1 $commit | wc -w)" -gt 2 ]; then
         echo "⚠️ Skipping merge commit $commit"
         continue
       fi
 
       # Проверка на секреты
-      DIFF=$(git show $commit)
-      if echo "$DIFF" | grep -Eq "$SECRET_PATTERNS"; then
+      if git show $commit | grep -Eq "$SECRET_PATTERNS"; then
         echo "⚠️ Skipping commit $commit (possible secret found)"
         continue
       fi
 
-      # Применяем коммит
+      # Пробуем применить
       if ! git cherry-pick $commit; then
-        echo "⚠️ Cherry-pick failed for $commit, attempting safe skip..."
+        echo "⚠️ Cherry-pick failed for $commit, skipping..."
         git cherry-pick --abort || true
         continue
       fi
 
-      # Если коммит пустой (уже есть в ветке), git сам пишет, ничего не коммитим
       echo "✅ Commit $commit applied successfully"
     done
-
-
