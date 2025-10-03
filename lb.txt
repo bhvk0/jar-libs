@@ -73,3 +73,71 @@ jobs:
       - name: Push new commits
         run: |
           git push origin feature/new-updates
+
+---
+
+
+name: Sync Upstream Repository
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # запуск каждый день в 03:00
+
+jobs:
+  sync:
+    runs-on: [self-hosted, linux, corporate-runner]
+
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/rosetta-models/blank-base-model || true
+          git fetch upstream
+
+      - name: Prepare local branch
+        run: |
+          git checkout feature/new-updates || git checkout -b feature/new-updates origin/feature/new-updates || git checkout -b feature/new-updates
+
+      - name: Cherry-pick new commits from upstream
+        run: |
+          set -e
+
+          # Список новых коммитов в апстриме
+          NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main || true)
+
+          if [ -z "$NEW_COMMITS" ]; then
+            echo "✅ No new commits to sync"
+            exit 0
+          fi
+
+          echo "Found new commits:"
+          echo "$NEW_COMMITS"
+
+          # Регулярки для поиска секретов
+          SECRET_PATTERNS="(hooks.slack.com|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN( RSA)? PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]+|eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9._-]*\.[A-Za-z0-9._-]*)"
+
+          for commit in $NEW_COMMITS; do
+            echo "🔍 Checking commit $commit..."
+            DIFF=$(git show $commit)
+
+            if echo "$DIFF" | grep -Eq "$SECRET_PATTERNS"; then
+              echo "⚠️ Skipping commit $commit (possible secret found)"
+              continue
+            fi
+
+            echo "➡️ Applying commit $commit"
+            if ! git cherry-pick $commit; then
+              echo "⚠️ Cherry-pick failed for $commit, skipping..."
+              git cherry-pick --abort || true
+            fi
+          done
+
+      - name: Push updates
+        run: |
+          git push origin feature/new-updates || echo "⚠️ Nothing to push"
+
