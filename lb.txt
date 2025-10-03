@@ -1,19 +1,27 @@
-name: Sync external repo to feature/new-updates
+name: Sync new commits to feature/new-updates
 
 on:
   schedule:
-    - cron: '0 2 * * *' # каждый день в 2:00
+    - cron: '0 2 * * *' # ежедневно в 2:00
   workflow_dispatch:     # ручной запуск
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, corporate-runner]
+
+    container:
+      image: ubuntu:latest
 
     steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y git curl
+
       - name: Checkout corporate repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # полный репозиторий нужен для cherry-pick
 
       - name: Configure Git
         run: |
@@ -25,24 +33,20 @@ jobs:
           git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
           git fetch upstream
 
-      - name: Update feature/new-updates branch
+      - name: Cherry-pick new commits from upstream
         run: |
           git checkout feature/new-updates
-          git reset --hard upstream/main
-
-      - name: Check for changes before push
-        id: changes
-        run: |
-          git fetch origin feature/new-updates
-          if git diff --quiet feature/new-updates origin/feature/new-updates; then
-            echo "no_changes=true" >> $GITHUB_ENV
-          else
-            echo "no_changes=false" >> $GITHUB_ENV
+          # Получаем список новых коммитов после нашей ветки
+          NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main)
+          if [ -z "$NEW_COMMITS" ]; then
+            echo "No new commits to sync"
+            exit 0
           fi
+          for COMMIT in $NEW_COMMITS; do
+            echo "Applying commit $COMMIT"
+            git cherry-pick $COMMIT || echo "Skipped commit $COMMIT due to conflict or policy"
+          done
 
-      - name: Push changes if any
-        if: env.no_changes == 'false'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push new commits
         run: |
-          git push -f https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/new-updates
+          git push origin feature/new-updates
