@@ -1,101 +1,48 @@
-Liquibase MongoDB – Required Files & Libraries
-1. Core Components
+name: Sync external repo to feature/new-updates
 
-Regardless of OSS or Commercial, you need:
+on:
+  schedule:
+    - cron: '0 2 * * *' # каждый день в 2:00
+  workflow_dispatch:     # ручной запуск
 
-Liquibase CLI / Core Library
+jobs:
+  sync:
+    runs-on: ubuntu-latest
 
-The main Liquibase executable (liquibase CLI or Java JAR).
+    steps:
+      - name: Checkout corporate repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-Provides the command framework, changelog parsing, and change execution.
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-Liquibase MongoDB Extension
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
+          git fetch upstream
 
-A database-specific extension that lets Liquibase talk to MongoDB.
+      - name: Update feature/new-updates branch
+        run: |
+          git checkout feature/new-updates
+          git reset --hard upstream/main
 
-Distributed as a JAR file.
+      - name: Check for changes before push
+        id: changes
+        run: |
+          git fetch origin feature/new-updates
+          if git diff --quiet feature/new-updates origin/feature/new-updates; then
+            echo "no_changes=true" >> $GITHUB_ENV
+          else
+            echo "no_changes=false" >> $GITHUB_ENV
+          fi
 
-2. OSS Setup (Open Source)
-Required JARs / Files
-
-liquibase-core (comes with CLI or Maven/Gradle dep)
-→ Base Liquibase engine.
-
-liquibase-mongodb extension (OSS)
-→ Provides support for MongoDB changes (insertOne, insertMany, update, delete, runCommand).
-
-MongoDB Java Driver
-→ Required for connecting to MongoDB. Typically bundled with the extension.
-
-How to Install
-
-Option A: Standalone CLI
-Download the extension JAR and put it in the liquibase/lib folder next to the Liquibase executable:
-liquibase/
-  ├─ liquibase (CLI binary or liquibase.jar)
-  ├─ lib/
-      ├─ liquibase-mongodb-<version>.jar
-      ├─ mongodb-driver-sync-<version>.jar
-
-Option B: Maven/Gradle Dependency (Java project)
-<dependency>
-  <groupId>org.liquibase.ext</groupId>
-  <artifactId>liquibase-mongodb</artifactId>
-  <version>4.30.0</version> <!-- match your Liquibase version -->
-</dependency>
-
-✅ OSS MongoDB extension allows only basic changesets:
-
-insertOne
-
-insertMany
-
-update
-
-delete
-
-runCommand
-
-
-3. Commercial Setup (Pro/Enterprise)
-Additional JARs / Files
-
-In addition to the OSS libraries, Commercial versions provide Pro extensions:
-
-liquibase-commercial.jar
-→ Core library enabling enterprise-only changes and advanced rollback.
-
-liquibase-mongodb-pro.jar (sometimes bundled into the commercial package)
-→ Unlocks advanced MongoDB features, e.g.:
-
-mongoFile changesets (executing external .js or .json scripts).
-
-Extended rollback support.
-
-Schema diffing and audit/reporting for MongoDB.
-
-License file (liquibase.lic)
-→ Must be placed in $HOME/.liquibase/ or set via LIQUIBASE_LICENSE_KEY environment variable.
-
-Folder Structure Example
-
-liquibase/
-  ├─ liquibase (CLI)
-  ├─ lib/
-      ├─ liquibase-mongodb-<version>.jar
-      ├─ liquibase-commercial-<version>.jar
-      ├─ liquibase-mongodb-pro-<version>.jar
-      ├─ mongodb-driver-sync-<version>.jar
-  ├─ liquibase.lic   <-- License file
-
-
-
-
-Summary:
-
-OSS = liquibase-core + liquibase-mongodb + MongoDB driver.
-
-Pro = OSS libs + liquibase-commercial.jar + liquibase-mongodb-pro.jar + license file.
-
-Key difference: Pro supports mongoFile changesets and advanced enterprise features, while OSS only supports basic MongoDB operations (insertOne, insertMany, update, etc.).
-
+      - name: Push changes if any
+        if: env.no_changes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -f https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/new-updates
