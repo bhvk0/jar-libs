@@ -33,19 +33,42 @@ jobs:
           git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
           git fetch upstream
 
-      - name: Cherry-pick new commits from upstream
-        run: |
-          git checkout feature/new-updates
-          # Получаем список новых коммитов после нашей ветки
-          NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main)
-          if [ -z "$NEW_COMMITS" ]; then
-            echo "No new commits to sync"
-            exit 0
-          fi
-          for COMMIT in $NEW_COMMITS; do
-            echo "Applying commit $COMMIT"
-            git cherry-pick $COMMIT || echo "Skipped commit $COMMIT due to conflict or policy"
-          done
+- name: Cherry-pick new commits from upstream
+  run: |
+    git checkout feature/new-updates
+
+    # Список коммитов, которые нужно пропустить (удалённые вручную)
+    SKIPPED_COMMITS=("abc123" "def456")  # замените на реальные хэши
+
+    # Получаем список новых коммитов после нашей ветки
+    NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main)
+
+    if [ -z "$NEW_COMMITS" ]; then
+      echo "No new commits to sync"
+      exit 0
+    fi
+
+    # Отключаем падение скрипта при ошибке
+    set +e
+
+    # Проходим по каждому новому коммиту
+    for COMMIT in $NEW_COMMITS; do
+      if [[ " ${SKIPPED_COMMITS[@]} " =~ " ${COMMIT} " ]]; then
+        echo "Skipping commit $COMMIT (blacklisted)"
+        continue
+      fi
+
+      echo "Applying commit $COMMIT..."
+      git cherry-pick $COMMIT
+
+      if [ $? -ne 0 ]; then
+        echo "Skipped commit $COMMIT due to conflict or policy"
+        git cherry-pick --abort
+      else
+        echo "Successfully applied commit $COMMIT"
+      fi
+    done
+
 
       - name: Push new commits
         run: |
