@@ -1,40 +1,48 @@
-- name: Cherry-pick new commits from upstream
-  run: |
-    set -e
+name: Sync external repo to feature/new-updates
 
-    NEW_COMMITS=$(git log --reverse --format="%H" feature/new-updates..upstream/main || true)
+on:
+  schedule:
+    - cron: '0 2 * * *' # каждый день в 2:00
+  workflow_dispatch:     # ручной запуск
 
-    if [ -z "$NEW_COMMITS" ]; then
-      echo "✅ No new commits to sync"
-      exit 0
-    fi
+jobs:
+  sync:
+    runs-on: ubuntu-latest
 
-    echo "Found new commits:"
-    echo "$NEW_COMMITS"
+    steps:
+      - name: Checkout corporate repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-    SECRET_PATTERNS="(hooks.slack.com|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN( RSA)? PRIVATE KEY-----|xox[baprs]-[0-9A-Za-z-]+|eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9._-]*\.[A-Za-z0-9._-]*)"
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-    for commit in $NEW_COMMITS; do
-      echo "🔍 Checking commit $commit..."
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
+          git fetch upstream
 
-      # Если это merge-коммит — пропускаем заранее
-      if [ "$(git rev-list --parents -n 1 $commit | wc -w)" -gt 2 ]; then
-        echo "⚠️ Skipping merge commit $commit"
-        continue
-      fi
+      - name: Update feature/new-updates branch
+        run: |
+          git checkout feature/new-updates
+          git reset --hard upstream/main
 
-      # Проверка на секреты
-      if git show $commit | grep -Eq "$SECRET_PATTERNS"; then
-        echo "⚠️ Skipping commit $commit (possible secret found)"
-        continue
-      fi
+      - name: Check for changes before push
+        id: changes
+        run: |
+          git fetch origin feature/new-updates
+          if git diff --quiet feature/new-updates origin/feature/new-updates; then
+            echo "no_changes=true" >> $GITHUB_ENV
+          else
+            echo "no_changes=false" >> $GITHUB_ENV
+          fi
 
-      # Пробуем применить
-      if ! git cherry-pick $commit; then
-        echo "⚠️ Cherry-pick failed for $commit, skipping..."
-        git cherry-pick --abort || true
-        continue
-      fi
-
-      echo "✅ Commit $commit applied successfully"
-    done
+      - name: Push changes if any
+        if: env.no_changes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push -f https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/new-updates
