@@ -1,12 +1,12 @@
-name: Sync external repo to feature/new-updates
+name: Sync upstream repository
 
 on:
   schedule:
-    - cron: '0 2 * * *' # каждый день в 2:00
-  workflow_dispatch:     # ручной запуск
+    - cron: '0 2 * * *'  # каждый день в 2:00
+  workflow_dispatch:
 
 jobs:
-  sync:
+  sync-upstream:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,26 +23,30 @@ jobs:
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
-          git fetch upstream
+          git fetch upstream master
 
-      - name: Update feature/new-updates branch
+      - name: Checkout feature/upstream-updates branch
+        run: git checkout feature/upstream-updates
+
+      - name: Determine new commits
+        id: new_commits
         run: |
-          git checkout feature/new-updates
-          git reset --hard upstream/main
+          # Список коммитов upstream/master, которых нет в нашей ветке
+          COMMITS=$(comm -23 <(git rev-list upstream/master | sort) <(git rev-list feature/upstream-updates | sort))
+          echo "new_commits=$COMMITS" >> $GITHUB_ENV
+          echo "Found $(echo "$COMMITS" | wc -w) new commits"
 
-      - name: Check for changes before push
-        id: changes
+      - name: Cherry-pick new commits
+        if: env.new_commits != ''
         run: |
-          git fetch origin feature/new-updates
-          if git diff --quiet feature/new-updates origin/feature/new-updates; then
-            echo "no_changes=true" >> $GITHUB_ENV
-          else
-            echo "no_changes=false" >> $GITHUB_ENV
-          fi
+          for c in ${{ env.new_commits }}; do
+            echo "Applying commit $c"
+            git cherry-pick $c || git cherry-pick --skip
+          done
 
-      - name: Push changes if any
-        if: env.no_changes == 'false'
+      - name: Push changes
+        if: env.new_commits != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push -f https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/new-updates
+          git push https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/upstream-updates
