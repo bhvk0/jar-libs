@@ -50,3 +50,23 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git push https://x-access-token:${GH_TOKEN}@github.com/<org>/company-blank-base-model.git feature/upstream-updates
+
+
+---
+
+- name: Add upstream remote
+  run: |
+    if [ "${{ inputs.use_token }}" = "true" ]; then
+      TOKEN=${{ secrets[${{ inputs.secret_name }}] }}
+      git remote add upstream https://x-access-token:$TOKEN@github.com/rosetta-models/blank-base-model.git || true
+    else
+      git remote add upstream https://github.com/rosetta-models/blank-base-model.git || true
+    fi
+    git fetch upstream master
+
+if [ "${{ inputs.use_token }}" = "true" ]; then
+  TOKEN=${{ secrets[inputs.secret_name] }}
+  git remote add upstream "https://x-access-token:$TOKEN@github.com/org/repo.git"
+else
+  git remote add upstream "https://github.com/org/repo.git"
+fi
