@@ -35,13 +35,18 @@ jobs:
           echo "new_commits=$COMMITS" >> $GITHUB_ENV
           echo "Found $(echo "$COMMITS" | wc -w) new commits"
 
-      - name: Cherry-pick new commits
+     - name: Cherry-pick new commits
         if: env.new_commits != ''
         run: |
+          # Сбрасываем возможный зависший cherry-pick
+          git reset --hard || true
+          git update-ref -d CHERRY_PICK_HEAD || true
+
           for c in ${{ env.new_commits }}; do
             echo "Applying commit $c"
+            # Пробуем cherry-pick, если конфликт — жёстко перетираем всеми изменениями из коммита
             if ! git cherry-pick "$c"; then
-              echo "Conflict detected. Auto-resolving with --theirs..."
+              echo "⚠️ Conflict detected. Overwriting everything with theirs..."
               git checkout --theirs .
               git add -A
               git cherry-pick --continue || git cherry-pick --skip
