@@ -62,20 +62,19 @@ jobs:
 
 
 ---
-
       - name: Fetch upstream
         run: |
-          git fetch upstream main
+          git fetch upstream master
 
       - name: Determine new commits
         id: new_commits
         run: |
-          # Берём все коммиты из upstream/main, которых нет в текущей ветке
-          COMMITS=$(git rev-list upstream/main ^HEAD)
+          # Берём все обычные коммиты из upstream/master, которых нет в текущей ветке (merge-коммиты исключаем)
+          COMMITS=$(git rev-list upstream/master ^HEAD --no-merges)
           echo "new_commits=$COMMITS" >> $GITHUB_ENV
           echo "Found $(echo "$COMMITS" | wc -w) new commits"
 
-      - name: Cherry-pick new commits (force theirs)
+      - name: Cherry-pick new commits (force overwrite)
         if: env.new_commits != ''
         run: |
           # Чистим возможный зависший cherry-pick
@@ -85,10 +84,12 @@ jobs:
           # Применяем все коммиты один за другим
           for c in ${{ env.new_commits }}; do
             echo "Applying commit $c"
+            # Любые конфликты автоматически перетираются их версией
             while ! git cherry-pick "$c"; do
-              echo "⚠️ Conflict detected. Overwriting everything with theirs..."
+              echo "⚠️ Conflict detected. Force overwriting everything with theirs..."
               git checkout --theirs . || true
               git add -A || true
               git cherry-pick --continue || git cherry-pick --skip || break
             done
           done
+
