@@ -31,10 +31,10 @@ jobs:
       - name: Determine new commits
         id: new_commits
         run: |
-          # Список коммитов upstream/master, которых нет в нашей ветке
-          COMMITS=$(comm -23 <(git rev-list upstream/master | sort) <(git rev-list feature/upstream-updates | sort))
+          COMMITS=$(comm -23 <(git rev-list upstream/main | sort) <(git rev-list feature/upstream-updates | sort) | tr '\n' ' ')
           echo "new_commits=$COMMITS" >> $GITHUB_ENV
           echo "Found $(echo "$COMMITS" | wc -w) new commits"
+
 
       - name: Cherry-pick new commits
         if: env.new_commits != ''
