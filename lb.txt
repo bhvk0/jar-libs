@@ -104,3 +104,14 @@ foreach ($branch in $branches) {
     Write-Host "Tracking branch: $branch"
     git branch --track $branch "upstream/$branch" 2>$null
 }
+
+
+# Обновить все локальные ветки содержимым из upstream
+foreach ($branch in (git branch --format='%(refname:short)')) {
+    git switch $branch
+    git pull --ff-only upstream $branch 2>$null
+}
+
+# Затем запушить всё в origin
+git push origin --all
+git push origin --tags
