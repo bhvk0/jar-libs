@@ -95,86 +95,12 @@ jobs:
 
 ----
 
+git fetch upstream --prune
 
-MongoDB Ops Manager — Adjusting and Verifying pointInTimeWindowHours (PITR)
-📘 Purpose
+$branches = git branch -r | Where-Object { $_ -match '^  upstream/' -and $_ -notmatch '->' } |
+    ForEach-Object { ($_ -replace '^\s*upstream/', '').Trim() }
 
-The pointInTimeWindowHours parameter defines how long Ops Manager retains oplog slices used for Point-in-Time Restore (PITR).
-If set to 0, PITR is disabled, and Ops Manager only keeps regular snapshots — no oplog data is continuously stored in the OplogStore.
-
-1. Get Required Identifiers
-🔹 Project ID (GROUP-ID)
-
-Open your project in Ops Manager.
-
-Copy the project ID from the URL, for example:
-https://opsmanager.example.com/v2/#/groups/665f98c9d4d1230001b1b9d9/overview
-→ 665f98c9d4d1230001b1b9d9 is your GROUP-ID.
-
-Alternatively, via API:
-curl -u "PUBLIC_KEY:PRIVATE_KEY" --digest \
-  -X GET "https://opsmanager.example.com/api/public/v1.0/groups"
-
-Cluster ID (CLUSTER-ID)
-List all backup configurations for the project:
-curl -u "PUBLIC_KEY:PRIVATE_KEY" --digest \
-  -X GET "https://opsmanager.example.com/api/public/v1.0/groups/{GROUP-ID}/backupConfigs"
-
-
-Look for your cluster name, then take the clusterId field.
-Example:
-{
-  "clusterId": "665fa1e9d4d1230001b1c1f3",
-  "clusterName": "UAT-ReplicaSet"
+foreach ($branch in $branches) {
+    Write-Host "Tracking branch: $branch"
+    git branch --track $branch "upstream/$branch" 2>$null
 }
-
-
-2. Check Current PITR Window
-curl -u "PUBLIC_KEY:PRIVATE_KEY" --digest -s \
-  -H "Accept: application/json" \
-  -X GET "https://opsmanager.example.com/api/public/v1.0/groups/{GROUP-ID}/backupConfigs/{CLUSTER-ID}/snapshotSchedule" \
-  | jq '.pointInTimeWindowHours'
-
-Example output:
-24
-
-3. Update PITR Window (Disable PITR)
-To disable PITR completely:
-curl -u "PUBLIC_KEY:PRIVATE_KEY" --digest \
-  -H "Content-Type: application/json" \
-  -X PATCH \
-  "https://opsmanager.example.com/api/public/v1.0/groups/{GROUP-ID}/backupConfigs/{CLUSTER-ID}/snapshotSchedule" \
-  -d '{
-    "pointInTimeWindowHours": 0
-  }'
-
-
-4. Verify the Change
-Run again
-curl -u "PUBLIC_KEY:PRIVATE_KEY" --digest -s \
-  -H "Accept: application/json" \
-  -X GET "https://opsmanager.example.com/api/public/v1.0/groups/{GROUP-ID}/backupConfigs/{CLUSTER-ID}/snapshotSchedule" \
-  | jq '.pointInTimeWindowHours'
-
-Expected output: 0
-
-
-
-Validation in UI
-
-In Ops Manager UI:
-
-Go to Deployment → Backups → Snapshot Schedules.
-
-Select your cluster.
-
-Under Point-in-Time Restore, the field
-“Allow point-in-time restores going back” should now show
-“Disabled” or 0/24 (temporary state until full sync).
-
-
-Notes
-
-When pointInTimeWindowHours = 0, Ops Manager stops storing oplog slices in the OplogStore, significantly reducing backup storage usage.
-The cluster’s local MongoDB oplogSizeMB parameter is not affected — it’s internal to the replica set.
-The change only impacts Ops Manager’s backup system, not the MongoDB instance itself.
