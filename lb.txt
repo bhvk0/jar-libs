@@ -186,20 +186,23 @@ jobs:
 
 ---
 
-      - name: Sync upstream master into temp branch
+      - name: Sync upstream master into sync-master
         shell: bash
         run: |
           set -euo pipefail
-          
-          git fetch upstream master
-          git switch -C sync-master upstream/master
 
-      - name: Create PR to master
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: sync-master
-          base: master
-          title: "Sync upstream/master → master"
-          body: "This PR updates master from upstream/master."
-          delete-branch: true
+          echo "Fetching latest upstream master..."
+          git fetch upstream master
+
+          echo "Creating or updating sync-master from upstream/master..."
+          if git show-ref --verify --quiet refs/heads/sync-master; then
+            git switch sync-master
+          else
+            git switch -c sync-master upstream/master
+          fi
+
+          git reset --hard upstream/master
+          git push origin sync-master --force
+
+          echo "✅ sync-master branch updated from upstream/master"
+
