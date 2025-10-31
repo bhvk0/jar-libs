@@ -122,56 +122,65 @@ git push origin --tags
 name: Sync Upstream Branches
 
 on:
-  workflow_dispatch: # можно запускать вручную
+  workflow_dispatch:  # можно запускать вручную
   schedule:
-    - cron: '0 4 * * *' # (опционально) ежедневный sync в 4 утра UTC
+    - cron: '0 4 * * *' # опционально: ежедневный запуск в 4 утра UTC
 
 jobs:
   sync:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # нужно, чтобы видеть все ветки
+          fetch-depth: 0  # чтобы видеть все ветки
 
-      - name: Set up Git identity
+      - name: Configure git
         run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream remote
-        shell: pwsh
+      - name: Add upstream and fetch
         run: |
-          $upstreamUrl = "https://github.com/rosetta-models/common-domain-model.git"
-          git remote add upstream $upstreamUrl
+          git remote add upstream https://github.com/rosetta-models/common-domain-model.git || true
           git fetch upstream --prune --tags
 
-      - name: Sync branches from upstream (except master)
-        shell: pwsh
+      - name: Sync all branches except master
         run: |
-          Write-Host "Fetching branches from upstream..."
-          git fetch upstream --prune
+          set -euo pipefail
 
-          # Собираем все ветки upstream
-          $branches = git branch -r | Where-Object { $_ -match '^  upstream/' -and $_ -notmatch '->' } |
-              ForEach-Object { ($_ -replace '^\s*upstream/', '').Trim() }
+          # Получаем список всех веток upstream
+          branches=$(git branch -r | grep '^  upstream/' | grep -v '->' | sed 's/^  upstream\///')
 
-          foreach ($branch in $branches) {
-              if ($branch -eq "master") {
-                  Write-Host "⚠️  Skipping protected branch: $branch"
-                  continue
-              }
+          for branch in $branches; do
+            echo "→ Processing branch: $branch"
 
-              Write-Host "→ Tracking branch: $branch"
-              git branch --track $branch "upstream/$branch" 2>$null
+            # Пропускаем master
+            if [[ "$branch" == "master" ]]; then
+              echo "⚠️  Skipping protected branch: $branch"
+              continue
+            fi
 
-              git switch $branch 2>$null
-              git pull --ff-only upstream $branch 2>$null
+            # Создаём локальную tracking-ветку, если её нет
+            if ! git show-ref --verify --quiet refs/heads/$branch; then
+              echo "→ Creating local branch $branch tracking upstream/$branch"
+              git branch --track "$branch" "upstream/$branch" || true
+            fi
 
-              Write-Host "→ Pushing $branch to origin"
-              git push origin $branch
-          }
+            # Обновляем ветку
+            git switch "$branch" >/dev/null 2>&1 || git checkout -B "$branch" "upstream/$branch"
+            git pull --ff-only upstream "$branch" || true
 
-          Write-Host "→ Syncing tags..."
+            # Пушим в origin
+            echo "→ Pushing $branch to origin"
+            git push origin "$branch"
+          done
+
+          echo "→ Syncing tags..."
           git push origin --tags
+
+          echo "✅ All branches (except master) synced successfully!"
+
