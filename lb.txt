@@ -184,3 +184,22 @@ jobs:
 
           echo "✅ All branches (except master) synced successfully!"
 
+---
+
+      - name: Sync upstream master into temp branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          
+          git fetch upstream master
+          git switch -C sync-master upstream/master
+
+      - name: Create PR to master
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: sync-master
+          base: master
+          title: "Sync upstream/master → master"
+          body: "This PR updates master from upstream/master."
+          delete-branch: true
