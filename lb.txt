@@ -250,3 +250,25 @@ EOF
     ROSETTA_TOKEN: ${{ secrets.ROSETTA_TOKEN }}
     REPOSITORY: ${{ inputs.REPOSITORY }}
 
+---
+
+- name: Setup SSH for private repo
+  run: |
+    mkdir -p ~/.ssh
+    echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+    chmod 600 ~/.ssh/id_ed25519
+
+    # Добавляем GitHub в known_hosts, чтобы не было запроса подтверждения
+    ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+- name: Add upstream and fetch
+  run: |
+    # Добавляем upstream если его нет
+    if ! git remote | grep -q upstream; then
+      git remote add upstream git@github.com:rosetta-models/${REPOSITORY}.git
+    fi
+
+    # Fetch upstream
+    git fetch upstream --prune --tags
+  env:
+    REPOSITORY: ISO-20022
