@@ -308,3 +308,4 @@ EOF
     # Отключаем проверку хоста
     echo -e "Host github.com\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile=/dev/null" > ~/.ssh/config
 
+echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK9XQ+Vn..." > ~/.ssh/known_hosts
