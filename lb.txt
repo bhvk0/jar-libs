@@ -206,3 +206,15 @@ jobs:
 
           echo "✅ sync-master branch updated from upstream/master"
 
+---
+
+- name: Fetch upstream (classic PAT)
+  run: |
+    B64=$(printf '%s' "${GITHUB_USER}:${ROSETTA_TOKEN}" | base64 | tr -d '\n')
+    git -c http.extraHeader="Authorization: Basic ${B64}" \
+        fetch "https://github.com/rosetta-models/${REPOSITORY}.git" \
+        --prune --tags
+  env:
+    GITHUB_USER: my-username   # твой GitHub login
+    ROSETTA_TOKEN: ${{ secrets.ROSETTA_TOKEN }}
+    REPOSITORY: ISO-20022
