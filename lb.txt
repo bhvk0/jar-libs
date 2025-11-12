@@ -218,3 +218,35 @@ jobs:
     GITHUB_USER: my-username   # твой GitHub login
     ROSETTA_TOKEN: ${{ secrets.ROSETTA_TOKEN }}
     REPOSITORY: ISO-20022
+
+--
+
+- name: Configure Git credentials for upstream
+  if: ${{ inputs.USE_TOKEN == 'true' }}
+  run: |
+    echo "Configuring git credentials for upstream..."
+    
+    # Сохраняем credential
+    git config --global credential.helper store
+    git config --global credential.useHttpPath true
+    
+    # Добавляем токен как пароль для username
+    git credential approve <<EOF
+protocol=https
+host=github.com
+username=${GITHUB_USER}
+password=${ROSETTA_TOKEN}
+EOF
+
+    # Добавляем upstream (если ещё нет)
+    if ! git remote | grep -q upstream; then
+      git remote add upstream "https://github.com/rosetta-models/${REPOSITORY}.git"
+    fi
+
+    # Делаем fetch
+    git fetch upstream --prune --tags
+  env:
+    GITHUB_USER: ghauser1
+    ROSETTA_TOKEN: ${{ secrets.ROSETTA_TOKEN }}
+    REPOSITORY: ${{ inputs.REPOSITORY }}
+
