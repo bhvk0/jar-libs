@@ -272,3 +272,26 @@ EOF
     git fetch upstream --prune --tags
   env:
     REPOSITORY: ISO-20022
+
+
+- name: Setup SSH
+  run: |
+    mkdir -p ~/.ssh
+    chmod 700 ~/.ssh
+
+    # Декодируем base64 ключ
+    echo "${{ secrets.SSH_PRIVATE_KEY_BASE64 }}" | base64 --decode > ~/.ssh/id_ed25519
+    chmod 600 ~/.ssh/id_ed25519
+
+    # Добавляем GitHub в known_hosts
+    ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+- name: Add upstream and fetch
+  run: |
+    if ! git remote | grep -q upstream; then
+      git remote add upstream git@github.com:rosetta-models/${REPOSITORY}.git
+    fi
+    git fetch upstream --prune --tags
+  env:
+    REPOSITORY: ISO-20022
+
