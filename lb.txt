@@ -221,15 +221,15 @@ jobs:
 
 --
 
-- name: Configure Git credentials for upstream
+- name: Configure git credentials for upstream
   if: ${{ inputs.USE_TOKEN == 'true' }}
   run: |
-    echo "Configuring git credentials for upstream..."
-    
-    # Сохраняем credential
+    echo "Setting up git credentials for upstream..."
+
+    # Настраиваем credential helper
     git config --global credential.helper store
     git config --global credential.useHttpPath true
-    
+
     # Добавляем токен как пароль для username
     git credential approve <<EOF
 protocol=https
