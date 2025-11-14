@@ -309,3 +309,95 @@ EOF
     echo -e "Host github.com\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile=/dev/null" > ~/.ssh/config
 
 echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK9XQ+Vn..." > ~/.ssh/known_hosts
+
+---
+
+Upstream Sync Pipeline Documentation
+
+This page describes the GitHub Actions workflow responsible for synchronizing updates from the upstream repository (rosetta-models/blank-base-model) into our internal corporate repository.
+
+Overview
+
+Our project uses two related CI/CD workflows:
+
+Shared Pipeline – the main CI pipeline used across projects for building, testing, and deployments.
+
+Upstream Sync Pipeline – a dedicated workflow designed to fully synchronize our internal fork with the upstream repository.
+
+This document covers the second one: Sync Upstream Repository.
+
+Purpose
+
+The Upstream Sync Pipeline performs a full resynchronization of our internal repository with the upstream rosetta-models codebase.
+Unlike the previous implementation, we no longer cherry-pick individual commits.
+
+The pipeline now:
+
+performs a clean clone of the upstream repository (without preserving local master),
+
+updates our internal tracking branch,
+
+and separately synchronizes the upstream master branch into our local branch called sync-master.
+
+This ensures our internal fork always has an accurate, conflict-free mirror of the upstream structure, while still keeping our internal modifications isolated.
+
+Triggering
+
+The workflow runs in two ways:
+
+Daily at 02:00 UTC (via cron schedule)
+
+Manually via workflow_dispatch
+
+Workflow Structure
+1. Clone Corporate Repository
+
+The workflow checks out the internal repo with full history.
+
+2. Configure Git
+
+Sets the Git identity used for automated syncing.
+
+3. Add Upstream Remote & Fetch
+
+Adds rosetta-models/blank-base-model as the upstream remote and fetches all branches.
+
+4. Full Clone of Upstream State
+
+The pipeline completely refreshes the upstream-tracking tree:
+
+upstream code is copied over,
+
+local master is not used,
+
+we maintain a clean, conflict-free state reflecting the upstream repository layout.
+
+This ensures our fork stays structurally consistent with upstream.
+
+5. Synchronize With Local sync-master
+
+Separately, the workflow:
+
+fetches upstream master,
+
+rebases or resets our internal branch sync-master to match it,
+
+pushes updates back to the corporate repository.
+
+This branch is used internally as a “golden copy” of upstream master.
+
+6. Push Updated Branches
+
+All synced branches (including sync-master and the refreshed upstream-tracking branch) are pushed back to GitHub.
+
+Result
+
+The internal repository stays fully aligned with the upstream project.
+
+sync-master always holds the latest upstream master content.
+
+No cherry-picks or conflict-resolution loops are required.
+
+Internal development remains isolated from the upstream mirror.
+
+If you want, I can also prepare a more compact version, add Confluence panels/macros, or include diagrams.
