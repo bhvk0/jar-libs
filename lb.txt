@@ -401,3 +401,30 @@ No cherry-picks or conflict-resolution loops are required.
 Internal development remains isolated from the upstream mirror.
 
 If you want, I can also prepare a more compact version, add Confluence panels/macros, or include diagrams.
+
+---
+
+Known Issues
+1. Private upstream repositories requiring authentication
+
+Some upstream repositories (2 out of 10 in our case) are private and require authentication in order to be cloned or fetched.
+
+GitHub Actions (GHA) masks all tokens placed directly into logs (even when used in commands).
+Because of this:
+
+the pipeline cannot correctly pass the token to git fetch / git clone,
+
+the token appears in logs as ******,
+
+and Git operations fail with authentication errors.
+
+This makes the standard upstream sync pipeline unusable for repositories that require credentials to access the upstream source.
+
+Workaround:
+You must use a Personal Access Token (PAT) with the correct permissions and provide it to the workflow as an encrypted GitHub Secret (e.g., UPSTREAM_PAT).
+However, even with that, GHA masking may still prevent full cloning if the token appears in the command output.
+
+2. GitHub Actions token masking interferes with Git command execution
+
+GitHub automatically redacts any string that matches the pattern of a secret. This happens not only in logs, but sometimes also within the Git transport layer.
+As a result, URLs such as:
