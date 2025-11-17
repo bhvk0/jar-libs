@@ -372,3 +372,39 @@ jobs:
             --password="$SQL_TOKEN" \
             --changeLogFile=changelog/mssql-changeset.yml \
             update
+---
+
+jobs:
+  azure-cli-test:
+    runs-on: [self-hosted, linux]
+
+    # Контейнер с уже установленным az CLI
+    container:
+      image: mcr.microsoft.com/azure-cli:2.65.0
+      options: --user root
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Check Azure CLI version
+        run: |
+          az version
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Show account info
+        run: |
+          az account show
+
+      - name: Get access token for Azure SQL
+        run: |
+          az account get-access-token \
+            --resource https://database.windows.net/ \
+            --query accessToken -o tsv
