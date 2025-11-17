@@ -312,119 +312,63 @@ echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK9XQ+Vn..." > ~/.ssh/known
 
 ---
 
-Upstream Sync Pipeline Documentation
+name: Liquibase Reusable Workflow
 
-This page describes the GitHub Actions workflow responsible for synchronizing updates from the upstream repository (rosetta-models/blank-base-model) into our internal corporate repository.
+on:
+  workflow_call:
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
 
-Overview
+permissions:
+  id-token: write
+  contents: read
 
-Our project uses two related CI/CD workflows:
+jobs:
+  liquibase-deploy:
+    runs-on: [self-hosted, linux]
+    environment: ${{ inputs.ENVIRONMENT }}
 
-Shared Pipeline – the main CI pipeline used across projects for building, testing, and deployments.
+    container:
+      image: liquibase/liquibase:4.29.2
+      options: --user root
 
-Upstream Sync Pipeline – a dedicated workflow designed to fully synchronize our internal fork with the upstream repository.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-This document covers the second one: Sync Upstream Repository.
+      # 1. Login to Azure using OIDC (NO secrets, NO passwords)
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-Purpose
+      # 2. Get Azure AD access token for Azure SQL
+      - name: Get AAD Token for MSSQL
+        id: get_sql_token
+        run: |
+          TOKEN=$(az account get-access-token \
+            --resource https://database.windows.net/ \
+            --query accessToken -o tsv)
 
-The Upstream Sync Pipeline performs a full resynchronization of our internal repository with the upstream rosetta-models codebase.
-Unlike the previous implementation, we no longer cherry-pick individual commits.
+          echo "::add-mask::$TOKEN"
+          echo "SQL_TOKEN=$TOKEN" >> $GITHUB_ENV
 
-The pipeline now:
+      # 3. Add MSSQL JDBC Driver
+      - name: Add MSSQL JDBC Driver
+        run: |
+          curl -L https://jfrog.mycompany.com/artifactory/devops-local/liquibase/lib/mssql-jdbc-12.4.0.jre11.jar \
+            -o /liquibase/lib/mssql-jdbc.jar
 
-performs a clean clone of the upstream repository (without preserving local master),
-
-updates our internal tracking branch,
-
-and separately synchronizes the upstream master branch into our local branch called sync-master.
-
-This ensures our internal fork always has an accurate, conflict-free mirror of the upstream structure, while still keeping our internal modifications isolated.
-
-Triggering
-
-The workflow runs in two ways:
-
-Daily at 02:00 UTC (via cron schedule)
-
-Manually via workflow_dispatch
-
-Workflow Structure
-1. Clone Corporate Repository
-
-The workflow checks out the internal repo with full history.
-
-2. Configure Git
-
-Sets the Git identity used for automated syncing.
-
-3. Add Upstream Remote & Fetch
-
-Adds rosetta-models/blank-base-model as the upstream remote and fetches all branches.
-
-4. Full Clone of Upstream State
-
-The pipeline completely refreshes the upstream-tracking tree:
-
-upstream code is copied over,
-
-local master is not used,
-
-we maintain a clean, conflict-free state reflecting the upstream repository layout.
-
-This ensures our fork stays structurally consistent with upstream.
-
-5. Synchronize With Local sync-master
-
-Separately, the workflow:
-
-fetches upstream master,
-
-rebases or resets our internal branch sync-master to match it,
-
-pushes updates back to the corporate repository.
-
-This branch is used internally as a “golden copy” of upstream master.
-
-6. Push Updated Branches
-
-All synced branches (including sync-master and the refreshed upstream-tracking branch) are pushed back to GitHub.
-
-Result
-
-The internal repository stays fully aligned with the upstream project.
-
-sync-master always holds the latest upstream master content.
-
-No cherry-picks or conflict-resolution loops are required.
-
-Internal development remains isolated from the upstream mirror.
-
-If you want, I can also prepare a more compact version, add Confluence panels/macros, or include diagrams.
-
----
-
-Known Issues
-1. Private upstream repositories requiring authentication
-
-Some upstream repositories (2 out of 10 in our case) are private and require authentication in order to be cloned or fetched.
-
-GitHub Actions (GHA) masks all tokens placed directly into logs (even when used in commands).
-Because of this:
-
-the pipeline cannot correctly pass the token to git fetch / git clone,
-
-the token appears in logs as ******,
-
-and Git operations fail with authentication errors.
-
-This makes the standard upstream sync pipeline unusable for repositories that require credentials to access the upstream source.
-
-Workaround:
-You must use a Personal Access Token (PAT) with the correct permissions and provide it to the workflow as an encrypted GitHub Secret (e.g., UPSTREAM_PAT).
-However, even with that, GHA masking may still prevent full cloning if the token appears in the command output.
-
-2. GitHub Actions token masking interferes with Git command execution
-
-GitHub automatically redacts any string that matches the pattern of a secret. This happens not only in logs, but sometimes also within the Git transport layer.
-As a result, URLs such as:
+      # 4. Run Liquibase using AAD access token
+      - name: Run Liquibase for MSSQL (AAD auth)
+        run: |
+          liquibase \
+            --url="jdbc:sqlserver://${{ vars.LIQUIBASE_HOST_NAME }};databaseName=${{ vars.LIQUIBASE_DATABASE_NAME }};encrypt=true;trustServerCertificate=false" \
+            --username="${{ vars.LIQUIBASE_COMMAND_USERNAME }}" \
+            --password="$SQL_TOKEN" \
+            --changeLogFile=changelog/mssql-changeset.yml \
+            update
