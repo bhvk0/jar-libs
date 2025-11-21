@@ -408,3 +408,38 @@ jobs:
           az account get-access-token \
             --resource https://database.windows.net/ \
             --query accessToken -o tsv
+
+FROM liquibase/liquibase:4.29.2
+
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies for Azure CLI
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        curl \
+        apt-transport-https \
+        lsb-release \
+        gnupg && \
+    rm -rf /var/lib/apt/lists/*
+
+# Add Microsoft signing key
+RUN curl -sL https://packages.microsoft.com/keys/microsoft.asc | \
+    gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg
+
+# Add Azure CLI repo
+RUN echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
+    > /etc/apt/sources.list.d/azure-cli.list
+
+# Install Azure CLI
+RUN apt-get update && \
+    apt-get install -y azure-cli && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /home/liquibase && \
+    chown -R liquibase:liquibase /home/liquibase
+
+# Switch back to liquibase user
+USER liquibase
+# ENV HOME=/home/liquibase
